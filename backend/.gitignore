@@ -8,3 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Env files (commit .env.example only)
+.env
