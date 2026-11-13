@@ -14,6 +14,7 @@ const ServerMessage = z.discriminatedUnion('type', [
   z.object({ type: z.literal('history'), messages: z.array(ChatMessage) }),
   z.object({ type: z.literal('delta'), text: z.string() }),
   z.object({ type: z.literal('done') }),
+  z.object({ type: z.literal('error'), message: z.string() }),
 ])
 
 // Matches CONVERSATION_NOT_FOUND in the backend's main.py.
@@ -24,6 +25,7 @@ const input = ref('')
 const messages = ref<ChatMessage[]>([])
 const streaming = ref(false)
 const notFound = ref(false)
+const error = ref<string | null>(null)
 const scroller = useTemplateRef('scroller')
 
 const { send } = useWebSocket(wsURL, {
@@ -49,6 +51,12 @@ const { send } = useWebSocket(wsURL, {
       case 'done':
         streaming.value = false
         break
+      case 'error':
+        // Drop the reply bubble if nothing arrived; a partial reply stays visible.
+        if (messages.value.at(-1)?.content === '') messages.value.pop()
+        error.value = result.data.message
+        streaming.value = false
+        break
     }
   },
   onDisconnected(_ws, event) {
@@ -67,6 +75,7 @@ function submit() {
   send(text)
   messages.value.push({ role: 'user', content: text }, { role: 'assistant', content: '' })
   streaming.value = true
+  error.value = null
   input.value = ''
   scrollToBottom()
 }
@@ -94,6 +103,7 @@ function submit() {
       </div>
     </div>
 
+    <p v-if="error" role="alert" class="px-4 pt-2 text-sm text-red-600">{{ error }}</p>
     <form @submit.prevent="submit" class="flex gap-2 border-t border-slate-200 p-4">
       <input
         v-model="input"

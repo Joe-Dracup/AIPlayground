@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.config import settings
-from app.llm import ChatMessage, LLMClient, get_llm
+from app.llm import ChatMessage, LLMClient, LLMError, get_llm
 from app.store import PostgresConversationStore, get_store
 
 app = FastAPI()
@@ -68,9 +68,14 @@ async def web_socket_endpoint(
 
             # Forward each chunk as it arrives, and keep the full reply for the history.
             reply = ""
-            async for chunk in llm.stream_reply(messages):
-                reply += chunk
-                await websocket.send_json({"type": "delta", "text": chunk})
+            try:
+                async for chunk in llm.stream_reply(messages):
+                    reply += chunk
+                    await websocket.send_json({"type": "delta", "text": chunk})
+            except LLMError as e:
+                # The partial reply isn't saved; the user's message stays, so they can try again.
+                await websocket.send_json({"type": "error", "message": str(e)})
+                continue
 
             # Only saved once complete, so a reply cut off by an error is never stored.
             assistant_message: ChatMessage = {"role": "assistant", "content": reply}

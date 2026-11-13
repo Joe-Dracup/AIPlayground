@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app.llm import FakeLLM, get_llm
+from app.llm import FakeLLM, LLMError, get_llm
 from app.main import CONVERSATION_NOT_FOUND, app
 
 
@@ -89,6 +89,25 @@ def test_reconnecting_returns_the_saved_history(client):
                 {"role": "assistant", "content": "Hello there"},
             ],
         }
+
+
+class FailingLLM:
+    async def stream_reply(self, messages):
+        yield "Partial"
+        raise LLMError("Something broke")
+
+
+def test_a_failed_reply_is_reported_and_not_saved(client):
+    conversation_id = new_conversation(client)
+    app.dependency_overrides[get_llm] = lambda: FailingLLM()
+    with client.websocket_connect(f"/ws/{conversation_id}") as ws:
+        ws.receive_json()  # history
+        ws.send_text("hi")
+        assert ws.receive_json() == {"type": "delta", "text": "Partial"}
+        assert ws.receive_json() == {"type": "error", "message": "Something broke"}
+
+    with client.websocket_connect(f"/ws/{conversation_id}") as ws:
+        assert ws.receive_json()["messages"] == [{"role": "user", "content": "hi"}]
 
 
 def test_an_unknown_conversation_is_closed_as_not_found(client):

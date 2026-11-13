@@ -46,6 +46,15 @@ uv run fastapi run      # no reload
 
 API docs are at http://127.0.0.1:8000/docs. The entrypoint (`app.main:app`) is set in `pyproject.toml`, so no path is needed.
 
+## Linting and formatting
+
+[Ruff](https://docs.astral.sh/ruff/) does both; its settings are in `pyproject.toml`.
+
+```sh
+uv run ruff check --fix .   # lint, fixing what it safely can
+uv run ruff format .        # format
+```
+
 ## Testing
 
 ```sh
