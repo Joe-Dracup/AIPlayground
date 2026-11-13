@@ -1,7 +1,7 @@
 import { afterEach, describe, it, expect, vi } from 'vitest'
 import { h, Suspense } from 'vue'
 
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { apiFetch } from '@/api/client'
 import HomeView from '../HomeView.vue'
 
@@ -15,6 +15,9 @@ function mountWithSuspense() {
         default: () => h(HomeView),
         fallback: () => h('p', 'Loading…'),
       }),
+  }, {
+    // No router is installed in tests, so swap RouterLink for a stub that just records its props.
+    global: { stubs: { RouterLink: RouterLinkStub } },
   })
 }
 
@@ -41,5 +44,14 @@ describe('HomeView', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Failed to load: Network down')
+  })
+
+  it('links to a new chat', async () => {
+    vi.mocked(apiFetch).mockResolvedValue({ message: 'Hello world' })
+
+    const wrapper = mountWithSuspense()
+    await flushPromises()
+
+    expect(wrapper.findComponent(RouterLinkStub).props('to')).toEqual({ name: 'new-chat' })
   })
 })

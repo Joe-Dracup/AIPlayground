@@ -1,0 +1,22 @@
+# Local development database. Start with `docker compose up -d` from /backend.
+services:
+  db:
+    image: postgres:18
+    environment:
+      # Local-only credentials; never reuse these anywhere real.
+      POSTGRES_USER: aiplayground
+      POSTGRES_PASSWORD: aiplayground
+      POSTGRES_DB: aiplayground
+    ports:
+      - "5432:5432"
+    volumes:
+      # Keeps the data when the container is removed. Postgres 18+ stores it under /var/lib/postgresql.
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiplayground -d aiplayground"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db-data:

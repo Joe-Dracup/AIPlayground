@@ -2,19 +2,28 @@
 import { useWebSocket } from '@vueuse/core'
 import { env } from '@/env'
 import { nextTick, ref, useTemplateRef } from 'vue'
+import { RouterLink } from 'vue-router'
 import { z } from 'zod'
 
-type ChatMessage = { role: 'user' | 'assistant'; content: string }
+const props = defineProps<{ id: string }>()
+
+const ChatMessage = z.object({ role: z.enum(['user', 'assistant']), content: z.string() })
+type ChatMessage = z.output<typeof ChatMessage>
 
 const ServerMessage = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('history'), messages: z.array(ChatMessage) }),
   z.object({ type: z.literal('delta'), text: z.string() }),
   z.object({ type: z.literal('done') }),
 ])
 
-const wsURL = new URL('ws', env.VITE_API_BASE_URL)
+// Matches CONVERSATION_NOT_FOUND in the backend's main.py.
+const CONVERSATION_NOT_FOUND = 4404
+
+const wsURL = new URL(`ws/${props.id}`, env.VITE_API_BASE_URL)
 const input = ref('')
 const messages = ref<ChatMessage[]>([])
 const streaming = ref(false)
+const notFound = ref(false)
 const scroller = useTemplateRef('scroller')
 
 const { send } = useWebSocket(wsURL, {
@@ -25,14 +34,25 @@ const { send } = useWebSocket(wsURL, {
       return
     }
 
-    if (result.data.type === 'delta') {
-      // submit() adds an empty assistant message, which the deltas fill in.
-      const reply = messages.value.at(-1)
-      if (reply?.role === 'assistant') reply.content += result.data.text
-      scrollToBottom()
-    } else {
-      streaming.value = false
+    switch (result.data.type) {
+      case 'history':
+        messages.value = result.data.messages
+        scrollToBottom()
+        break
+      case 'delta': {
+        // submit() adds an empty assistant message, which the deltas fill in.
+        const reply = messages.value.at(-1)
+        if (reply?.role === 'assistant') reply.content += result.data.text
+        scrollToBottom()
+        break
+      }
+      case 'done':
+        streaming.value = false
+        break
     }
+  },
+  onDisconnected(_ws, event) {
+    if (event.code === CONVERSATION_NOT_FOUND) notFound.value = true
   },
 })
 
@@ -55,7 +75,11 @@ function submit() {
 <template>
   <div class="mx-auto flex h-dvh max-w-2xl flex-col text-slate-900">
     <div ref="scroller" class="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
-      <p v-if="!messages.length" class="m-auto text-sm text-slate-400">Say something to start.</p>
+      <p v-if="notFound" class="m-auto text-sm text-slate-500">
+        Conversation not found.
+        <RouterLink to="/chat" class="text-indigo-600 underline">Start a new one</RouterLink>
+      </p>
+      <p v-else-if="!messages.length" class="m-auto text-sm text-slate-400">Say something to start.</p>
       <div
         v-for="(message, i) in messages"
         :key="i"

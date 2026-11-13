@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ENV_FILE)
 
     cors_origins: list[str]
+    database_url: str
 
 
 settings = Settings()

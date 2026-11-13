@@ -3,13 +3,13 @@ import re
 from collections.abc import AsyncIterator
 from typing import Protocol
 
-Message = dict[str, str]
+ChatMessage = dict[str, str]
 
 
 class LLMClient(Protocol):
     """Anything that can stream a reply to a conversation, one text chunk at a time."""
 
-    def stream_reply(self, messages: list[Message]) -> AsyncIterator[str]: ...
+    def stream_reply(self, messages: list[ChatMessage]) -> AsyncIterator[str]: ...
 
 
 class FakeLLM:
@@ -23,9 +23,9 @@ class FakeLLM:
         self.replies = replies or {}
         self.delay = delay
         # Every conversation this was asked to reply to, so tests can check what it was sent.
-        self.calls: list[list[Message]] = []
+        self.calls: list[list[ChatMessage]] = []
 
-    async def stream_reply(self, messages: list[Message]) -> AsyncIterator[str]:
+    async def stream_reply(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
         # Copy, because the caller keeps appending to the same list after this call.
         self.calls.append(list(messages))
         last = messages[-1]["content"]
