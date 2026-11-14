@@ -1,5 +1,8 @@
+from typing import Annotated
+
+from fastapi import Depends
 from sqlalchemy import MetaData
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
@@ -12,7 +15,7 @@ class Base(DeclarativeBase):
     metadata = MetaData(
         naming_convention={
             "ix": "ix_%(column_0_label)s",
-            "uq": "uq_%(table_name)s_%(column_0_name)s",
+            "uq": "uq_%(table_name)s_%(column_0_N_name)s",  # every column, joined by _
             "ck": "ck_%(table_name)s_%(constraint_name)s",
             "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
             "pk": "pk_%(table_name)s",
@@ -23,3 +26,11 @@ class Base(DeclarativeBase):
 # Doesn't connect yet: connections are opened on first use and pooled.
 engine = create_async_engine(settings.database_url)
 Session = async_sessionmaker(engine, expire_on_commit=False)
+
+
+def get_sessions() -> async_sessionmaker[AsyncSession]:
+    """Where everything that uses the database gets its sessions from. Tests override this."""
+    return Session
+
+
+Sessions = Annotated[async_sessionmaker[AsyncSession], Depends(get_sessions)]

@@ -214,3 +214,18 @@ def test_gives_up_on_endless_tool_calls(client):
 
     with client.websocket_connect(f"/ws/{conversation_id}") as ws:
         assert ws.receive_json()["messages"] == [{"role": "user", "content": "what time is it"}]
+
+
+def test_plays_a_list_of_steps_using_earlier_tool_results(client, llm):
+    seen = []
+    llm.replies["twice"] = [
+        FakeToolCall("get_time", {}),
+        FakeToolCall("get_time", lambda previous: seen.append(previous) or {}),
+    ]
+    with client.websocket_connect(f"/ws/{new_conversation(client)}") as ws:
+        ws.receive_json()  # history
+        ws.send_text("twice")
+        assert reply_text(ws) == "Tool said: 12:00"
+
+    assert seen == ["12:00"]
+    assert len(llm.calls) == 3

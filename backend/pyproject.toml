@@ -12,6 +12,7 @@ dependencies = [
     "anthropic>=2.8.0",
     "asyncpg>=0.32.0",
     "fastapi[standard]>=0.128.8",
+    "geoalchemy2>=0.21.0",
     "pydantic-settings>=2.16.0",
     "sqlalchemy[asyncio]>=2.1.8",
     "websockets>=17.3",
@@ -28,6 +29,7 @@ entrypoint = "app.main:app"
 dev = [
     "pytest>=9.2.0",
     "ruff>=0.17.5",
+    "testcontainers[postgres]>=4.15.0",
 ]
 
 [tool.ruff]

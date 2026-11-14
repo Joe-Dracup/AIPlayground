@@ -22,6 +22,7 @@ Postgres runs in Docker (`compose.yaml`), on `localhost:5432` with user, passwor
 
 ```sh
 docker compose up -d      # start in the background
+docker compose up -d --build   # rebuild after changing db/Dockerfile
 docker compose down       # stop (data is kept in the db-data volume)
 docker compose down -v    # stop and delete all data
 docker compose exec db psql -U aiplayground   # open a SQL shell
@@ -35,6 +36,12 @@ Tables are defined in `src/app/models.py` and migrated with Alembic (`migrations
 uv run alembic upgrade head                                   # apply all migrations (run after setup)
 uv run alembic revision --autogenerate -m "describe change"   # after changing models; review the generated file
 uv run alembic downgrade -1                                   # undo the last migration
+```
+
+### Sample data
+
+```sh
+uv run python -m app.seed   # add (or reset) sample places around Manchester city centre
 ```
 
 ## Running
@@ -61,4 +68,4 @@ uv run ruff format .        # format
 uv run pytest
 ```
 
-Tests need the Docker database running. They use a separate `aiplayground_test` database on the same server, created and reset automatically, so your dev data is never touched.
+Tests need Docker running, but not the dev database. They start their own throwaway Postgres container ([Testcontainers](https://testcontainers.com/)), built from `db/Dockerfile` and set up by running the migrations, and delete it when they finish. The first run builds the image, so it's slower.

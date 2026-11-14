@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
-from app.db import Session
+from app.db import Sessions
 from app.llm import ChatMessage
 from app.models import Conversation, Message
 
@@ -50,5 +50,5 @@ class PostgresConversationStore:
             await session.commit()
 
 
-def get_store() -> PostgresConversationStore:
-    return PostgresConversationStore(Session)
+def get_store(sessions: Sessions) -> PostgresConversationStore:
+    return PostgresConversationStore(sessions)

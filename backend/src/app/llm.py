@@ -1,7 +1,8 @@
 import asyncio
+import json
 import logging
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from functools import cache
 from typing import Any, Protocol
@@ -104,21 +105,30 @@ class AnthropicLLM:
 
 @dataclass(frozen=True)
 class FakeToolCall:
-    """A FakeLLM reply that asks for a tool to be run, instead of answering with text."""
+    """A FakeLLM step that calls a tool.
+
+    `input` is either the tool input, or a function that builds it from the previous tool's result.
+    """
 
     name: str
-    input: dict[str, Any]
+    input: dict[str, Any] | Callable[[str], dict[str, Any]]
+
+
+type FakeStep = str | FakeToolCall
 
 
 class FakeLLM:
     """Replies without calling a real API. Used in tests, and when no API key is set.
 
-    `replies` maps the user's latest message to the reply for it: text, or a FakeToolCall.
-    Anything else is echoed back, and tool results come back as "Tool said: ...".
+    `replies` maps a user message to the reply for it: text, a FakeToolCall, or a list of steps
+    played in order, one per reply. Anything else is echoed back, and tool results left over
+    after the steps run out come back as "Tool said: ...".
     `delay` is the pause in seconds between chunks, to make streaming visible in the UI.
     """
 
-    def __init__(self, replies: dict[str, str | FakeToolCall] | None = None, delay: float = 0):
+    def __init__(
+        self, replies: dict[str, FakeStep | list[FakeStep]] | None = None, delay: float = 0
+    ):
         self.replies = replies or {}
         self.delay = delay
         # Every conversation this was asked to reply to, so tests can check what it was sent.
@@ -130,15 +140,18 @@ class FakeLLM:
     ) -> AsyncIterator[LLMEvent]:
         # Copy, because the caller keeps appending to the same list after this call.
         self.calls.append(list(messages))
-        reply = self._reply_to(messages[-1]["content"])
+        reply = self._next_step(messages)
 
         if isinstance(reply, FakeToolCall):
             self._tool_calls_made += 1
+            tool_input = reply.input
+            if callable(tool_input):
+                tool_input = tool_input(messages[-1]["content"][0]["content"])
             tool_use = {
                 "type": "tool_use",
                 "id": f"toolu_fake_{self._tool_calls_made}",
                 "name": reply.name,
-                "input": reply.input,
+                "input": tool_input,
             }
             yield Finished([tool_use], "tool_use")
             return
@@ -149,11 +162,22 @@ class FakeLLM:
             yield TextDelta(chunk)
         yield Finished([{"type": "text", "text": reply}], "end_turn")
 
-    def _reply_to(self, content: str | list[dict[str, Any]]) -> str | FakeToolCall:
-        if isinstance(content, str):
-            return self.replies.get(content, f"You said: {content}")
-        # Otherwise it's the tool_result blocks for the tool calls in the previous reply.
-        return " ".join(f"Tool said: {block['content']}" for block in content)
+    def _next_step(self, messages: list[ChatMessage]) -> FakeStep:
+        # The user's message is the last one with text content; the rest are tool results.
+        prompt_index = max(
+            i
+            for i, message in enumerate(messages)
+            if message["role"] == "user" and isinstance(message["content"], str)
+        )
+        prompt = messages[prompt_index]["content"]
+        steps = self.replies.get(prompt, f"You said: {prompt}")
+        if not isinstance(steps, list):
+            steps = [steps]
+
+        step = sum(1 for message in messages[prompt_index:] if message["role"] == "assistant")
+        if step < len(steps):
+            return steps[step]
+        return " ".join(f"Tool said: {block['content']}" for block in messages[-1]["content"])
 
 
 # Cached so every chat shares one client (and its connection pool): a singleton.
@@ -172,6 +196,14 @@ def get_llm() -> LLMClient:
             "hi": "Hi, how are you?",
             "doing well thanks": "Good, hope your day keeps going well",
             "what time is it": FakeToolCall("get_time", {"timezone": "Europe/London"}),
+            "find piccadilly": FakeToolCall("find_place", {"query": "Piccadilly"}),
+            "pubs near piccadilly": [
+                FakeToolCall("find_place", {"query": "Manchester Piccadilly"}),
+                FakeToolCall(
+                    "search_places",
+                    lambda found: {"near_place_id": json.loads(found)[0]["id"], "category": "pub"},
+                ),
+            ],
         },
         delay=0.08,
     )

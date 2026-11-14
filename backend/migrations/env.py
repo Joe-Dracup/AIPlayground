@@ -2,6 +2,7 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
+from geoalchemy2 import alembic_helpers
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
@@ -14,8 +15,10 @@ from app.db import Base
 # access to the values within the .ini file in use.
 config = context.config
 
-# Use the app's DATABASE_URL rather than duplicating it in alembic.ini.
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Use the app's DATABASE_URL rather than duplicating it in alembic.ini, unless whoever is running
+# the migrations has already set one (the tests do, to migrate their own database).
+if config.get_main_option("sqlalchemy.url") is None:
+    config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -24,6 +27,15 @@ if config.config_file_name is not None:
 
 # The models autogenerate compares against the database.
 target_metadata = Base.metadata
+
+# GeoAlchemy2's helpers teach autogenerate about spatial columns and their indexes, and skip
+# the tables PostGIS creates and owns (like spatial_ref_sys), which aren't in our models.
+GEO_OPTIONS = {
+    "include_object": alembic_helpers.include_object,
+    "process_revision_directives": alembic_helpers.writer,
+    "render_item": alembic_helpers.render_item,
+}
+
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -47,6 +59,7 @@ def run_migrations_offline() -> None:
     context.configure(
         url=url,
         target_metadata=target_metadata,
+        **GEO_OPTIONS,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -56,7 +69,7 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(connection=connection, target_metadata=target_metadata, **GEO_OPTIONS)
 
     with context.begin_transaction():
         context.run_migrations()

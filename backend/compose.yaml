@@ -1,7 +1,8 @@
 # Local development database. Start with `docker compose up -d` from /backend.
 services:
   db:
-    image: postgres:18
+    # postgres:18 plus PostGIS. Rebuild after changing it: `docker compose up -d --build`.
+    build: ./db
     environment:
       # Local-only credentials; never reuse these anywhere real.
       POSTGRES_USER: aiplayground
