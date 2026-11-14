@@ -172,10 +172,11 @@ class StubAnthropic:
         self.beta = SimpleNamespace(messages=SimpleNamespace(stream=stream))
 
 
-async def reply_events(client: StubAnthropic, messages=None, tools=()) -> list:
+async def reply_events(client: StubAnthropic, messages=None, tools=(), system="Be nice.") -> list:
     llm = AnthropicLLM(client, model="claude-test")
     return [
-        event async for event in llm.stream_reply(messages or [Message.user("hi")], list(tools))
+        event
+        async for event in llm.stream_reply(system, messages or [Message.user("hi")], list(tools))
     ]
 
 
@@ -203,7 +204,7 @@ async def test_streams_text_then_finishes_with_the_reply():
 
 
 @pytest.mark.anyio
-async def test_sends_the_conversation_and_tools_in_anthropics_format():
+async def test_sends_the_system_prompt_conversation_and_tools_in_anthropics_format():
     client = StubAnthropic(content=[{"type": "text", "text": "Hi"}])
     spec = ToolSpec("get_time", "Get the time.", {"type": "object", "properties": {}})
     messages = [Message.user("what time is it")]
@@ -211,6 +212,7 @@ async def test_sends_the_conversation_and_tools_in_anthropics_format():
 
     [request] = client.requests
     assert request["model"] == "claude-test"
+    assert request["system"] == "Be nice."
     assert request["messages"] == to_anthropic(messages)
     assert request["tools"] == [to_anthropic_tool(spec)]
     assert request["max_tokens"] == AnthropicLLM.MAX_TOKENS

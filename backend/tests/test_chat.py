@@ -19,6 +19,7 @@ from app.llm import (
     get_llm,
 )
 from app.main import CONVERSATION_NOT_FOUND, app
+from app.prompt import SYSTEM_PROMPT
 from app.tools import get_tools
 from app.tools.base import Tool, ToolRegistry
 
@@ -120,6 +121,16 @@ def test_sends_the_whole_conversation_to_the_llm(client, llm):
     ]
 
 
+def test_sends_the_system_prompt_with_every_reply(client, llm):
+    with client.websocket_connect(f"/ws/{new_conversation(client)}") as ws:
+        ws.receive_json()  # history
+        ws.send_text("what time is it")
+        receive_reply(ws)
+
+    # One reply asking for the tool, one answering with its result.
+    assert llm.systems == [SYSTEM_PROMPT, SYSTEM_PROMPT]
+
+
 def test_reconnecting_returns_the_saved_history(client):
     conversation_id = new_conversation(client)
     with client.websocket_connect(f"/ws/{conversation_id}") as ws:
@@ -138,7 +149,7 @@ def test_reconnecting_returns_the_saved_history(client):
 
 
 class FailingLLM:
-    async def stream_reply(self, messages, tools):
+    async def stream_reply(self, system, messages, tools):
         yield TextDelta("Partial")
         raise LLMError("Something broke")
 
@@ -198,7 +209,7 @@ def test_history_shows_a_reply_that_used_tools_as_plain_text(client):
 class LoopingLLM:
     """Asks for the time every time, and never answers."""
 
-    async def stream_reply(self, messages, tools):
+    async def stream_reply(self, system, messages, tools):
         call = ToolCallPart(id=f"call_{len(messages)}", name="get_time", arguments={})
         yield Finished(Message(role="assistant", parts=[call]), "tool_calls")
 
@@ -270,7 +281,7 @@ def test_an_unexpected_error_is_reported_and_the_chat_carries_on(client, llm):
 class ThinkAloudLLM:
     """Says something, calls a tool, then answers: text on either side of a tool call."""
 
-    async def stream_reply(self, messages, tools):
+    async def stream_reply(self, system, messages, tools):
         if messages[-1].role == "tool":
             yield TextDelta("It's noon.")
             yield Finished(Message(role="assistant", parts=[TextPart(text="It's noon.")]), "end")
@@ -304,7 +315,7 @@ def test_text_either_side_of_a_tool_call_is_kept_apart(client):
 class DisconnectingLLM:
     """Fails part way through a reply the way sending to a browser that has gone away does."""
 
-    async def stream_reply(self, messages, tools):
+    async def stream_reply(self, system, messages, tools):
         yield TextDelta("Partial")
         raise WebSocketDisconnect(code=1006)
 

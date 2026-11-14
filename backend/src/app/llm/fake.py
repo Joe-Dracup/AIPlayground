@@ -48,13 +48,15 @@ class FakeLLM:
         self.delay = delay
         # Every conversation this was asked to reply to, so tests can check what it was sent.
         self.calls: list[list[Message]] = []
+        self.systems: list[str] = []
         self._tool_calls_made = 0
 
     async def stream_reply(
-        self, messages: list[Message], tools: list[ToolSpec]
+        self, system: str, messages: list[Message], tools: list[ToolSpec]
     ) -> AsyncIterator[LLMEvent]:
         # Copy, because the caller keeps appending to the same list after this call.
         self.calls.append(list(messages))
+        self.systems.append(system)
         reply = self._next_step(messages)
 
         if isinstance(reply, FakeRaise):

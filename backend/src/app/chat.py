@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
 from app.llm import Finished, LLMClient, LLMError, Message, TextDelta
+from app.prompt import SYSTEM_PROMPT
 from app.tools.base import ToolRegistry
 
 # The most replies the LLM gets in one turn. Each one can call tools, so this stops a confused
@@ -35,7 +36,7 @@ async def run_turn(
     for _ in range(MAX_STEPS):
         reply: Finished | None = None
         new_step = True
-        async for event in llm.stream_reply(messages + new_messages, tools.specs()):
+        async for event in llm.stream_reply(SYSTEM_PROMPT, messages + new_messages, tools.specs()):
             match event:
                 case TextDelta():
                     if new_step and wrote_text:

@@ -41,12 +41,13 @@ class ToolSpec:
 
 
 class LLMClient(Protocol):
-    """Anything that can stream one reply to a conversation, given the tools it may call.
+    """Anything that can stream one reply to a conversation, given the system prompt and the tools
+    it may call.
 
     Yields TextDelta events as the text arrives, then one Finished event. Raises LLMError if the
     reply fails, possibly after some text has already been sent.
     """
 
     def stream_reply(
-        self, messages: list[Message], tools: list[ToolSpec]
+        self, system: str, messages: list[Message], tools: list[ToolSpec]
     ) -> AsyncIterator[LLMEvent]: ...

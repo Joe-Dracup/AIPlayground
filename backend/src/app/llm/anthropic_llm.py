@@ -33,12 +33,13 @@ class AnthropicLLM:
         self._model = model
 
     async def stream_reply(
-        self, messages: list[Message], tools: list[ToolSpec]
+        self, system: str, messages: list[Message], tools: list[ToolSpec]
     ) -> AsyncIterator[LLMEvent]:
         try:
             async with self._client.beta.messages.stream(
                 model=self._model,
                 max_tokens=self.MAX_TOKENS,
+                system=system,
                 messages=to_anthropic(messages),
                 tools=[to_anthropic_tool(tool) for tool in tools],
                 # If Claude's safety checks decline a request, retry it on Anthropic's
