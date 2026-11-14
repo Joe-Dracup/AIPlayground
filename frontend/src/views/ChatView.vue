@@ -23,6 +23,7 @@ const CONVERSATION_NOT_FOUND = 4404
 const wsURL = new URL(`ws/${props.id}`, env.VITE_API_BASE_URL)
 const input = ref('')
 const messages = ref<ChatMessage[]>([])
+const loaded = ref(false)
 const streaming = ref(false)
 const notFound = ref(false)
 const error = ref<string | null>(null)
@@ -39,6 +40,7 @@ const { send } = useWebSocket(wsURL, {
     switch (result.data.type) {
       case 'history':
         messages.value = result.data.messages
+        loaded.value = true
         scrollToBottom()
         break
       case 'delta': {
@@ -71,7 +73,7 @@ async function scrollToBottom() {
 
 function submit() {
   const text = input.value.trim()
-  if (!text || streaming.value) return
+  if (!text || !loaded.value || streaming.value) return
   send(text)
   messages.value.push({ role: 'user', content: text }, { role: 'assistant', content: '' })
   streaming.value = true
@@ -83,15 +85,21 @@ function submit() {
 
 <template>
   <div class="mx-auto flex h-dvh max-w-2xl flex-col text-slate-900">
-    <div ref="scroller" class="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
+    <div
+      ref="scroller"
+      role="log"
+      aria-label="Conversation"
+      class="flex flex-1 flex-col gap-2 overflow-y-auto p-4"
+    >
       <p v-if="notFound" class="m-auto text-sm text-slate-500">
         Conversation not found.
         <RouterLink to="/chat" class="text-indigo-600 underline">Start a new one</RouterLink>
       </p>
       <p v-else-if="!messages.length" class="m-auto text-sm text-slate-400">Say something to start.</p>
-      <div
+      <article
         v-for="(message, i) in messages"
         :key="i"
+        :aria-label="message.role === 'user' ? 'You' : 'Assistant'"
         :class="[
           'max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2',
           message.role === 'user'
@@ -100,7 +108,7 @@ function submit() {
         ]"
       >
         {{ message.content || '…' }}
-      </div>
+      </article>
     </div>
 
     <p v-if="error" role="alert" class="px-4 pt-2 text-sm text-red-600">{{ error }}</p>
@@ -108,13 +116,14 @@ function submit() {
       <input
         v-model="input"
         type="text"
+        :disabled="!loaded"
         aria-label="Message"
         placeholder="Message"
-        class="flex-1 rounded-full border border-slate-300 px-4 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+        class="flex-1 rounded-full border border-slate-300 px-4 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 disabled:bg-slate-50"
       />
       <button
         type="submit"
-        :disabled="streaming"
+        :disabled="!loaded || streaming"
         class="rounded-full bg-indigo-600 px-4 py-2 font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50"
       >
         Send

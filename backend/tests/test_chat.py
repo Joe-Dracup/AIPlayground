@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 from starlette.websockets import WebSocketDisconnect
 
-from app.llm import FakeLLM, FakeToolCall, Finished, LLMError, TextDelta, get_llm
+from app.llm import FakeLLM, FakeRaise, FakeToolCall, Finished, LLMError, TextDelta, get_llm
 from app.main import CONVERSATION_NOT_FOUND, app
 from app.tools import get_tools
 from app.tools.base import Tool, ToolRegistry
@@ -229,3 +229,37 @@ def test_plays_a_list_of_steps_using_earlier_tool_results(client, llm):
 
     assert seen == ["12:00"]
     assert len(llm.calls) == 3
+
+
+async def _crash(args: NoInput) -> str:
+    raise RuntimeError("database is down")
+
+
+def test_a_failing_tool_is_reported_to_the_llm_and_the_reply_carries_on(client, llm):
+    broken = Tool(name="get_time", description="Get the time.", input_model=NoInput, run=_crash)
+    app.dependency_overrides[get_tools] = lambda: ToolRegistry([broken])
+    with client.websocket_connect(f"/ws/{new_conversation(client)}") as ws:
+        ws.receive_json()  # history
+        ws.send_text("what time is it")
+        assert reply_text(ws) == "Tool said: The tool failed unexpectedly."
+
+
+def test_an_unexpected_error_is_reported_and_the_chat_carries_on(client, llm):
+    llm.replies["break"] = FakeRaise(RuntimeError("boom"))
+    conversation_id = new_conversation(client)
+    with client.websocket_connect(f"/ws/{conversation_id}") as ws:
+        ws.receive_json()  # history
+        ws.send_text("break")
+        assert ws.receive_json() == {
+            "type": "error",
+            "message": "Something went wrong. Try again in a moment.",
+        }
+        ws.send_text("hi")
+        assert reply_text(ws) == "Hello there"
+
+    with client.websocket_connect(f"/ws/{conversation_id}") as ws:
+        assert ws.receive_json()["messages"] == [
+            {"role": "user", "content": "break"},
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "Hello there"},
+        ]

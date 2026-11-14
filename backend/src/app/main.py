@@ -1,3 +1,4 @@
+import logging
 import uuid
 from typing import Annotated
 
@@ -11,6 +12,8 @@ from app.llm import ChatMessage, LLMClient, LLMError, TextDelta, get_llm
 from app.store import PostgresConversationStore, get_store
 from app.tools import get_tools
 from app.tools.base import ToolRegistry
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -78,12 +81,19 @@ async def web_socket_endpoint(
                         case TurnComplete(new_messages):
                             # Only saved once complete, so a reply cut off by an error is never
                             # stored.
-                            messages.extend(new_messages)
                             await store.append(conversation_id, *new_messages)
+                            messages.extend(new_messages)
                             await websocket.send_json({"type": "done"})
             except LLMError as e:
                 # The partial reply isn't saved; the user's message stays, so they can try again.
                 await websocket.send_json({"type": "error", "message": str(e)})
+            except WebSocketDisconnect:
+                raise
+            except Exception:
+                logger.exception("Chat turn failed")
+                await websocket.send_json(
+                    {"type": "error", "message": "Something went wrong. Try again in a moment."}
+                )
     except WebSocketDisconnect:
         # The client closed the tab or navigated away. Everything is already saved.
         pass

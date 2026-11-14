@@ -4,11 +4,13 @@ import { RouterView } from 'vue-router'
 
 <template>
   <RouterView v-slot="{ Component }">
-    <Suspense>
-      <component :is="Component" />
-      <template #fallback>
-        <p>Loading…</p>
-      </template>
-    </Suspense>
+    <template v-if="Component">
+      <Suspense>
+        <component :is="Component" />
+        <template #fallback>
+          <p>Loading…</p>
+        </template>
+      </Suspense>
+    </template>
   </RouterView>
 </template>

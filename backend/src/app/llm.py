@@ -114,7 +114,14 @@ class FakeToolCall:
     input: dict[str, Any] | Callable[[str], dict[str, Any]]
 
 
-type FakeStep = str | FakeToolCall
+@dataclass(frozen=True)
+class FakeRaise:
+    """A FakeLLM step that fails with `error`, like a bug or an unexpected response."""
+
+    error: Exception
+
+
+type FakeStep = str | FakeToolCall | FakeRaise
 
 
 class FakeLLM:
@@ -129,7 +136,7 @@ class FakeLLM:
     def __init__(
         self, replies: dict[str, FakeStep | list[FakeStep]] | None = None, delay: float = 0
     ):
-        self.replies = replies or {}
+        self.replies = dict(replies or {})
         self.delay = delay
         # Every conversation this was asked to reply to, so tests can check what it was sent.
         self.calls: list[list[ChatMessage]] = []
@@ -141,6 +148,9 @@ class FakeLLM:
         # Copy, because the caller keeps appending to the same list after this call.
         self.calls.append(list(messages))
         reply = self._next_step(messages)
+
+        if isinstance(reply, FakeRaise):
+            raise reply.error
 
         if isinstance(reply, FakeToolCall):
             self._tool_calls_made += 1
@@ -186,24 +196,27 @@ def _anthropic_client(api_key: str) -> anthropic.AsyncAnthropic:
     return anthropic.AsyncAnthropic(api_key=api_key)
 
 
+# The replies FakeLLM gives when it stands in for Claude: in dev without an API key, and in the
+# application tests.
+FAKE_REPLIES: dict[str, FakeStep | list[FakeStep]] = {
+    "hi": "Hi, how are you?",
+    "doing well thanks": "Good, hope your day keeps going well",
+    "what time is it": FakeToolCall("get_time", {"timezone": "Europe/London"}),
+    "find piccadilly": FakeToolCall("find_place", {"query": "Piccadilly"}),
+    "pubs near piccadilly": [
+        FakeToolCall("find_place", {"query": "Manchester Piccadilly"}),
+        FakeToolCall(
+            "search_places",
+            lambda found: {"near_place_id": json.loads(found)[0]["id"], "category": "pub"},
+        ),
+    ],
+    "break": FakeRaise(RuntimeError("FakeLLM was asked to break")),
+}
+
+
 def get_llm() -> LLMClient:
     if settings.anthropic_api_key is not None:
         client = _anthropic_client(settings.anthropic_api_key.get_secret_value())
         return AnthropicLLM(client, model=settings.anthropic_model)
 
-    return FakeLLM(
-        replies={
-            "hi": "Hi, how are you?",
-            "doing well thanks": "Good, hope your day keeps going well",
-            "what time is it": FakeToolCall("get_time", {"timezone": "Europe/London"}),
-            "find piccadilly": FakeToolCall("find_place", {"query": "Piccadilly"}),
-            "pubs near piccadilly": [
-                FakeToolCall("find_place", {"query": "Manchester Piccadilly"}),
-                FakeToolCall(
-                    "search_places",
-                    lambda found: {"near_place_id": json.loads(found)[0]["id"], "category": "pub"},
-                ),
-            ],
-        },
-        delay=0.08,
-    )
+    return FakeLLM(replies=FAKE_REPLIES, delay=0.08)
