@@ -30,14 +30,10 @@ Store = Annotated[PostgresConversationStore, Depends(get_store)]
 CONVERSATION_NOT_FOUND = 4404
 
 
-@app.get("/")
-def read_root():
-    return {"message": "Hello world"}
-
-
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: str | None = None):
-    return {"item_id": item_id, "q": q}
+@app.get("/healthz")
+def health() -> dict[str, str]:
+    """Liveness: answers as soon as the server is up. Checks no dependencies."""
+    return {"status": "ok"}
 
 
 class ConversationCreated(BaseModel):

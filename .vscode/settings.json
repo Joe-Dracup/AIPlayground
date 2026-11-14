@@ -1,5 +1,8 @@
 {
-  "eslint.workingDirectories": ["frontend"],
+  "eslint.workingDirectories": [
+    "frontend",
+    "application-tests"
+  ],
   "editor.codeActionsOnSave": {
     "source.fixAll": "explicit"
   },

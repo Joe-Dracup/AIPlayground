@@ -1,3 +1,4 @@
+import process from 'node:process'
 import { defineConfig, devices } from '@playwright/test'
 
 // Separate from the dev servers' ports (8000 and 5173), so both can run at once.
@@ -15,14 +16,22 @@ export default defineConfig({
     baseURL: UI_URL,
     trace: 'on-first-retry',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
   webServer: [
     {
       // A throwaway database with the sample places, and a FakeLLM instead of a real LLM.
       command: 'uv run python tests/e2e_server.py',
       cwd: '../backend',
-      url: `${API_URL}/`,
-      env: { PORT: String(API_PORT), CORS_ORIGINS: JSON.stringify([UI_URL]) },
+      url: `${API_URL}/healthz`,
+      env: {
+        PORT: String(API_PORT),
+        CORS_ORIGINS: JSON.stringify([UI_URL]),
+      },
       // The first run builds the database image.
       timeout: 180_000,
       // Stop it like Ctrl+C, so it deletes its database container on the way out.

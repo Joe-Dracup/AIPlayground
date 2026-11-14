@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
-import { ApiError, ApiValidationError, apiFetch } from '../client'
+import { ApiError, apiFetch, ApiValidationError } from '../client'
 
 const env = vi.hoisted(() => ({ VITE_API_BASE_URL: 'http://api.test' }))
 vi.mock('@/env', () => ({ env }))
@@ -19,7 +19,9 @@ function jsonResponse(body: unknown, status = 200) {
   })
 }
 
-const MessageSchema = z.object({ message: z.string() })
+const messageSchema = z.object({
+  message: z.string(),
+})
 
 describe('apiFetch', () => {
   afterEach(() => {
@@ -31,7 +33,7 @@ describe('apiFetch', () => {
     env.VITE_API_BASE_URL = 'http://api.test/'
     const fetchMock = mockFetch(jsonResponse({ message: 'Hello world' }))
 
-    const data = await apiFetch('/items/1', MessageSchema)
+    const data = await apiFetch('/items/1', messageSchema)
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe('http://api.test/items/1')
     expect(data).toEqual({ message: 'Hello world' })
@@ -40,7 +42,7 @@ describe('apiFetch', () => {
   it('returns the schema output, not the raw body', async () => {
     mockFetch(jsonResponse({ message: 'Hello world', extra: true }))
 
-    const data = await apiFetch('/', MessageSchema.transform((d) => d.message.toUpperCase()))
+    const data = await apiFetch('/', messageSchema.transform(d => d.message.toUpperCase()))
 
     expect(data).toBe('HELLO WORLD')
   })
@@ -65,18 +67,28 @@ describe('apiFetch', () => {
   it('throws ApiValidationError when the body does not match the schema', async () => {
     mockFetch(jsonResponse({ Hello: 'World' }))
 
-    const error = await apiFetch('/', MessageSchema).catch((e: unknown) => e)
+    const error = await apiFetch('/', messageSchema).catch((e: unknown) => e)
 
     expect(error).toBeInstanceOf(ApiValidationError)
-    expect(error).toMatchObject({ path: '/', issues: [{ path: ['message'] }] })
+    expect(error).toMatchObject({
+      path: '/',
+      issues: [
+        {
+          path: ['message'],
+        },
+      ],
+    })
   })
 
   it('throws ApiError with the response body on non-2xx', async () => {
     mockFetch(jsonResponse({ detail: 'Not Found' }, 404))
 
-    const error = await apiFetch('missing', MessageSchema).catch((e: unknown) => e)
+    const error = await apiFetch('missing', messageSchema).catch((e: unknown) => e)
 
     expect(error).toBeInstanceOf(ApiError)
-    expect(error).toMatchObject({ status: 404, body: { detail: 'Not Found' } })
+    expect(error).toMatchObject({
+      status: 404,
+      body: { detail: 'Not Found' },
+    })
   })
 })

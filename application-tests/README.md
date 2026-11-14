@@ -23,6 +23,8 @@ pnpm exec playwright install chromium
 pnpm test          # run headless
 pnpm test:ui       # Playwright's UI mode: watch, step through, and re-run tests
 pnpm report        # open the report from the last run
+pnpm typecheck     # check the TypeScript
+pnpm lint          # oxlint, then ESLint for style and Playwright rules (pnpm lint:fix to fix)
 ```
 
 The first run builds the database image, so it's slower.

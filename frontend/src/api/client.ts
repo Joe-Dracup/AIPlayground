@@ -27,9 +27,12 @@ function buildUrl(path: string): string {
 }
 
 async function parseBody(response: Response): Promise<unknown> {
-  if (response.status === 204) return undefined
+  if (response.status === 204)
+    return undefined
   const contentType = response.headers.get('Content-Type') ?? ''
-  return contentType.includes('application/json') ? response.json() : response.text()
+  return contentType.includes('application/json')
+    ? response.json()
+    : response.text()
 }
 
 /**
@@ -43,14 +46,17 @@ export async function apiFetch<Schema extends z.ZodType>(
   init: RequestInit = {},
 ): Promise<z.output<Schema>> {
   const headers = new Headers(init.headers)
-  if (!headers.has('Accept')) headers.set('Accept', 'application/json')
+  if (!headers.has('Accept'))
+    headers.set('Accept', 'application/json')
 
   const response = await fetch(buildUrl(path), { ...init, headers })
   const body = await parseBody(response)
 
-  if (!response.ok) throw new ApiError(response.status, body)
+  if (!response.ok)
+    throw new ApiError(response.status, body)
 
   const result = schema.safeParse(body)
-  if (!result.success) throw new ApiValidationError(path, result.error.issues)
+  if (!result.success)
+    throw new ApiValidationError(path, result.error.issues)
   return result.data
 }

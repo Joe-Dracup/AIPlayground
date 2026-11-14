@@ -12,8 +12,8 @@ export function parseEnv(source: Record<string, unknown>): Env {
   const result = envSchema.safeParse(source)
   if (!result.success) {
     throw new Error(
-      `Invalid environment variables:\n${z.prettifyError(result.error)}\n\n` +
-        'Check frontend/.env (see .env.example for the expected values).',
+      `Invalid environment variables:\n${z.prettifyError(result.error)}\n\n`
+      + 'Check frontend/.env (see .env.example for the expected values).',
     )
   }
   return result.data

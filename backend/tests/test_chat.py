@@ -58,6 +58,12 @@ def client(llm, tools):
     return TestClient(app)
 
 
+def test_health_check_answers(client):
+    response = client.get("/healthz")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
 def new_conversation(client) -> str:
     response = client.post("/conversations")
     assert response.status_code == 201
@@ -259,3 +265,58 @@ def test_an_unexpected_error_is_reported_and_the_chat_carries_on(client, llm):
             {"role": "user", "content": "hi"},
             {"role": "assistant", "content": "Hello there"},
         ]
+
+
+class ThinkAloudLLM:
+    """Says something, calls a tool, then answers: text on either side of a tool call."""
+
+    async def stream_reply(self, messages, tools):
+        if messages[-1].role == "tool":
+            yield TextDelta("It's noon.")
+            yield Finished(Message(role="assistant", parts=[TextPart(text="It's noon.")]), "end")
+            return
+        yield TextDelta("Let me check.")
+        call = ToolCallPart(id="call_1", name="get_time", arguments={})
+        parts = [TextPart(text="Let me check."), call]
+        yield Finished(Message(role="assistant", parts=parts), "tool_calls")
+
+
+def test_text_either_side_of_a_tool_call_is_kept_apart(client):
+    conversation_id = new_conversation(client)
+    app.dependency_overrides[get_llm] = lambda: ThinkAloudLLM()
+    with client.websocket_connect(f"/ws/{conversation_id}") as ws:
+        ws.receive_json()  # history
+        ws.send_text("what time is it")
+        assert receive_reply(ws) == [
+            {"type": "delta", "text": "Let me check."},
+            {"type": "delta", "text": "\n\n"},
+            {"type": "delta", "text": "It's noon."},
+            {"type": "done"},
+        ]
+
+    with client.websocket_connect(f"/ws/{conversation_id}") as ws:
+        assert ws.receive_json()["messages"][-1] == {
+            "role": "assistant",
+            "content": "Let me check.\n\nIt's noon.",
+        }
+
+
+class DisconnectingLLM:
+    """Fails part way through a reply the way sending to a browser that has gone away does."""
+
+    async def stream_reply(self, messages, tools):
+        yield TextDelta("Partial")
+        raise WebSocketDisconnect(code=1006)
+
+
+def test_a_browser_leaving_mid_reply_saves_nothing_and_is_not_an_error(client, caplog):
+    conversation_id = new_conversation(client)
+    app.dependency_overrides[get_llm] = lambda: DisconnectingLLM()
+    with client.websocket_connect(f"/ws/{conversation_id}") as ws:
+        ws.receive_json()  # history
+        ws.send_text("hi")
+        assert ws.receive_json() == {"type": "delta", "text": "Partial"}
+
+    assert "Chat turn failed" not in caplog.text
+    with client.websocket_connect(f"/ws/{conversation_id}") as ws:
+        assert ws.receive_json()["messages"] == [{"role": "user", "content": "hi"}]

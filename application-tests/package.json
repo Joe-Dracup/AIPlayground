@@ -1,14 +1,23 @@
 {
   "name": "application-tests",
-  "private": true,
   "type": "module",
+  "private": true,
   "scripts": {
     "test": "playwright test",
     "test:ui": "playwright test --ui",
-    "report": "playwright show-report"
+    "report": "playwright show-report",
+    "typecheck": "tsc",
+    "lint": "oxlint && eslint .",
+    "lint:fix": "oxlint --fix && eslint . --fix"
   },
   "devDependencies": {
+    "@antfu/eslint-config": "^10.0.0",
     "@playwright/test": "1.65.1",
-    "@types/node": "^24.19.2"
+    "@types/node": "^24.19.2",
+    "eslint": "^10.15.0",
+    "eslint-plugin-oxlint": "~1.82.0",
+    "eslint-plugin-playwright": "^2.12.2",
+    "oxlint": "~1.82.0",
+    "typescript": "~6.0.3"
   }
 }
