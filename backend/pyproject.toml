@@ -30,6 +30,7 @@ dev = [
     "pytest>=9.2.0",
     "ruff>=0.17.5",
     "testcontainers[postgres]>=4.15.0",
+    "ty>=0.0.104",
 ]
 
 [tool.ruff]
@@ -37,12 +38,21 @@ line-length = 100
 
 [tool.ruff.lint]
 # Ruff's defaults (E4, E7, E9, F), plus import sorting, modern-syntax upgrades, likely bugs,
-# and importing another module's _private names. Listed in full because preview mode
+# importing another module's _private names, and banned APIs. Listed in full because preview mode
 # changes what the defaults are.
-select = ["E4", "E7", "E9", "F", "I", "UP", "B", "PLC2701"]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "PLC2701", "TID251"]
 # PLC2701 is a preview rule; only turn on the preview rules named above.
 preview = true
 explicit-preview-rules = true
+
+# APIs that TID251 reports.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"typing.cast".msg = "cast does nothing at runtime. Validate the value instead, e.g. with a pydantic TypeAdapter."
+"typing_extensions.cast".msg = "cast does nothing at runtime. Validate the value instead, e.g. with a pydantic TypeAdapter."
+
+[tool.ty.src]
+# Alembic's env.py and migrations trip ty up with false positives, and they're rarely edited.
+exclude = ["migrations"]
 
 [tool.alembic]
 script_location = "%(here)s/migrations"

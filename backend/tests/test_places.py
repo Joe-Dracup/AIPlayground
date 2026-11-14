@@ -23,6 +23,7 @@ async def place_id(sessions, name: str) -> int:
 async def names_near(sessions, name: str, **filters) -> list[str]:
     async with sessions() as session:
         places = await search_places_near(session, await place_id(sessions, name), **filters)
+    assert places is not None
     return [place.name for place in places]
 
 
@@ -58,7 +59,9 @@ async def test_searches_nearest_first_without_the_origin(sessions):
 async def test_search_includes_distances_in_whole_metres(sessions):
     origin = await place_id(sessions, "Manchester Piccadilly")
     async with sessions() as session:
-        [nearest] = await search_places_near(session, origin, within_m=1000, limit=1)
+        places = await search_places_near(session, origin, within_m=1000, limit=1)
+    assert places is not None
+    [nearest] = places
     assert nearest.name == "Mayfield Park"
     assert isinstance(nearest.distance_m, int)
     assert 250 < nearest.distance_m < 400

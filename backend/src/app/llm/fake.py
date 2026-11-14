@@ -64,9 +64,10 @@ class FakeLLM:
 
         if isinstance(reply, FakeToolCall):
             self._tool_calls_made += 1
-            arguments = reply.input
-            if callable(arguments):
-                arguments = arguments(messages[-1].tool_results[0].content)
+            if isinstance(reply.input, dict):
+                arguments = reply.input
+            else:
+                arguments = reply.input(messages[-1].tool_results[0].content)
             call = ToolCallPart(
                 id=f"call_fake_{self._tool_calls_made}", name=reply.name, arguments=arguments
             )

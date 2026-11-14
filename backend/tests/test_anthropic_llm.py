@@ -1,11 +1,10 @@
-from types import SimpleNamespace
 from typing import Any
 
 import anthropic
-import httpx
+import httpx2
 import pytest
 from anthropic.types.beta import BetaMessage
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 from app.config import settings
 from app.llm import (
@@ -74,6 +73,21 @@ def test_anthropic_blocks_survive_a_round_trip_unchanged():
     assert request == {"role": "assistant", "content": blocks}
 
 
+def test_stored_blocks_keep_fields_the_sdk_does_not_know():
+    thinking = THINKING | {"added_later": "x"}
+    [request] = to_anthropic([assistant(*from_anthropic([thinking]))])
+    assert request == {"role": "assistant", "content": [thinking]}
+
+
+@pytest.mark.parametrize(
+    "block",
+    [{"type": "thinking", "thinking": "No signature."}, {"type": "made_up", "data": 1}],
+)
+def test_stored_blocks_the_sdk_cannot_send_are_rejected(block):
+    with pytest.raises(ValidationError):
+        to_anthropic([assistant(*from_anthropic([block]))])
+
+
 def test_tool_results_are_sent_in_a_user_message():
     result = ToolResultPart(call_id="toolu_1", content="Error!", is_error=True)
     assert to_anthropic([Message(role="tool", parts=[result])]) == [
@@ -94,8 +108,21 @@ def test_tool_results_are_sent_in_a_user_message():
 def test_consecutive_messages_with_the_same_role_are_merged():
     results = Message(role="tool", parts=[ToolResultPart(call_id="toolu_1", content="12:00")])
     request = to_anthropic([Message.user("hi"), Message.user("anyone there?"), results])
-    assert len(request) == 1
-    assert [block["type"] for block in request[0]["content"]] == ["text", "text", "tool_result"]
+    assert request == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "hi"},
+                {"type": "text", "text": "anyone there?"},
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_1",
+                    "content": "12:00",
+                    "is_error": False,
+                },
+            ],
+        }
+    ]
 
 
 def test_other_providers_reasoning_and_empty_text_are_left_out():
@@ -147,10 +174,11 @@ class StubStream:
         return self._final
 
 
-class StubAnthropic:
-    """Stands in for AsyncAnthropic, recording each request instead of calling the API."""
+class StubAnthropic(anthropic.AsyncAnthropic):
+    """A real AsyncAnthropic, except that it records each request instead of calling the API."""
 
     def __init__(self, content=(), stop_reason="end_turn", texts=(), error=None):
+        super().__init__(api_key="test")
         self.requests: list[dict[str, Any]] = []
         final = BetaMessage.model_validate(
             {
@@ -169,7 +197,8 @@ class StubAnthropic:
             self.requests.append(request)
             return StubStream(list(texts), final, error)
 
-        self.beta = SimpleNamespace(messages=SimpleNamespace(stream=stream))
+        # Replaces the one method AnthropicLLM calls. The SDK caches `beta.messages`, so it sticks.
+        self.beta.messages.stream = stream
 
 
 async def reply_events(client: StubAnthropic, messages=None, tools=(), system="Be nice.") -> list:
@@ -253,7 +282,7 @@ async def test_a_refusal_is_an_error():
 
 @pytest.mark.anyio
 async def test_api_errors_become_a_safe_llm_error():
-    error = anthropic.APIConnectionError(request=httpx.Request("POST", "https://api.test"))
+    error = anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api.test"))
     with pytest.raises(LLMError) as raised:
         await reply_events(StubAnthropic(error=error))
     assert str(raised.value) == "The AI service returned an error. Try again in a moment."

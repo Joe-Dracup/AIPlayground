@@ -62,6 +62,14 @@ uv run ruff check --fix .   # lint, fixing what it safely can
 uv run ruff format .        # format
 ```
 
+## Type checking
+
+[ty](https://docs.astral.sh/ty/) checks `src/` and `tests/`; its settings are in `pyproject.toml`. It's pre-1.0, so new releases can add or change errors.
+
+```sh
+uv run ty check
+```
+
 ## Testing
 
 ```sh

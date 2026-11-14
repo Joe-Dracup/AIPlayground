@@ -1,6 +1,6 @@
 """A throwaway Postgres for tests, shared by pytest and the application tests' API server."""
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -19,7 +19,7 @@ def run_migrations(url: str) -> None:
 
 
 @contextmanager
-def test_database() -> Iterator[str]:
+def test_database() -> Generator[str]:
     """Starts Postgres from db/Dockerfile, runs the migrations, and yields its URL. Needs Docker.
 
     The container is deleted on exit. The image is kept, so later runs don't rebuild it.

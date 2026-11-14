@@ -7,6 +7,8 @@
     "source.fixAll": "explicit"
   },
   "python.defaultInterpreterPath": "backend/.venv/bin/python",
+  // ty's extension provides types, completions and hovers, so Pylance would only duplicate them.
+  "python.languageServer": "None",
   "[python]": {
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnSave": true,

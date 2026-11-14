@@ -1,3 +1,10 @@
 {
-  "recommendations": ["charliermarsh.ruff", "ms-python.python", "Vue.volar", "dbaeumer.vscode-eslint"]
+  "recommendations": [
+    "charliermarsh.ruff",
+    "astral-sh.ty",
+    "ms-python.python",
+    "Vue.volar",
+    "dbaeumer.vscode-eslint",
+    "oxc.oxc-vscode"
+  ]
 }

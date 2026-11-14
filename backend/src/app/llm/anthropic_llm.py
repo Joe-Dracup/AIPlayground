@@ -1,8 +1,10 @@
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, Literal
 
 import anthropic
+from anthropic.types.beta import BetaContentBlockParam, BetaMessageParam, BetaToolParam
+from pydantic import ConfigDict, TypeAdapter
 
 from app.llm.base import Finished, LLMError, LLMEvent, StopReason, TextDelta, ToolSpec
 from app.llm.messages import (
@@ -20,6 +22,10 @@ logger = logging.getLogger(__name__)
 PROVIDER = "anthropic"
 
 _STOP_REASONS: dict[str, StopReason] = {"tool_use": "tool_calls", "max_tokens": "length"}
+
+# Checks a stored block is one the SDK knows how to send. extra="allow" keeps fields the SDK
+# doesn't declare, which validation would otherwise drop, so the block goes back unchanged.
+_STORED_BLOCK = TypeAdapter(BetaContentBlockParam, config=ConfigDict(extra="allow"))
 
 
 class AnthropicLLM:
@@ -74,27 +80,32 @@ class AnthropicLLM:
         )
 
 
-def to_anthropic_tool(tool: ToolSpec) -> dict[str, Any]:
+def to_anthropic_tool(tool: ToolSpec) -> BetaToolParam:
     return {"name": tool.name, "description": tool.description, "input_schema": tool.parameters}
 
 
-def to_anthropic(messages: list[Message]) -> list[dict[str, Any]]:
+def to_anthropic(messages: list[Message]) -> list[BetaMessageParam]:
     """Our messages as the Anthropic API's: tool results go in user messages, and consecutive
     messages with the same role are merged."""
-    result: list[dict[str, Any]] = []
+    turns: list[tuple[Literal["user", "assistant"], list[BetaContentBlockParam]]] = []
     for message in messages:
         blocks = [block for part in message.parts if (block := _to_anthropic_block(part))]
         if not blocks:
             continue
         role = "assistant" if message.role == "assistant" else "user"
-        if result and result[-1]["role"] == role:
-            result[-1]["content"].extend(blocks)
+        if turns and turns[-1][0] == role:
+            turns[-1][1].extend(blocks)
         else:
-            result.append({"role": role, "content": blocks})
-    return result
+            turns.append((role, blocks))
+    return [
+        {"role": "assistant", "content": blocks}
+        if role == "assistant"
+        else {"role": "user", "content": blocks}
+        for role, blocks in turns
+    ]
 
 
-def _to_anthropic_block(part: Part) -> dict[str, Any] | None:
+def _to_anthropic_block(part: Part) -> BetaContentBlockParam | None:
     match part:
         case TextPart(text=text):
             # The API rejects empty text blocks.
@@ -110,9 +121,9 @@ def _to_anthropic_block(part: Part) -> dict[str, Any] | None:
             }
         # Thinking and other Anthropic-only blocks are sent back exactly as they arrived.
         case ReasoningPart(provider="anthropic", opaque=block):
-            return block
+            return _STORED_BLOCK.validate_python(block)
         case ProviderPart(provider="anthropic", data=block):
-            return block
+            return _STORED_BLOCK.validate_python(block)
         case _:
             # Another provider's reasoning or content, which Anthropic can't use.
             return None
