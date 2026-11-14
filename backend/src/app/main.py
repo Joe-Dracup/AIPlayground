@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from app.chat import TurnComplete, display_history, run_turn
 from app.config import settings
-from app.llm import ChatMessage, LLMClient, LLMError, TextDelta, get_llm
+from app.llm import LLMClient, LLMError, Message, TextDelta, get_llm
 from app.store import PostgresConversationStore, get_store
 from app.tools import get_tools
 from app.tools.base import ToolRegistry
@@ -58,7 +58,7 @@ async def web_socket_endpoint(
     store: Store,
 ):
     await websocket.accept()
-    messages: list[ChatMessage] | None = await store.load(conversation_id)
+    messages = await store.load(conversation_id)
     if messages is None:
         await websocket.close(code=CONVERSATION_NOT_FOUND, reason="Conversation not found")
         return
@@ -69,7 +69,7 @@ async def web_socket_endpoint(
     try:
         while True:
             data = await websocket.receive_text()
-            user_message: ChatMessage = {"role": "user", "content": data}
+            user_message = Message.user(data)
             messages.append(user_message)
             await store.append(conversation_id, user_message)
 

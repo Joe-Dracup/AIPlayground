@@ -1,5 +1,5 @@
 """Runs the API for the application tests (/application-tests), on a throwaway database with the
-sample places, and with a FakeLLM instead of Claude. Needs Docker.
+sample places, and with a FakeLLM instead of a real LLM. Needs Docker.
 
     uv run python tests/e2e_server.py
 

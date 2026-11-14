@@ -18,7 +18,7 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
     {
-      // A throwaway database with the sample places, and a FakeLLM instead of Claude.
+      // A throwaway database with the sample places, and a FakeLLM instead of a real LLM.
       command: 'uv run python tests/e2e_server.py',
       cwd: '../backend',
       url: `${API_URL}/`,

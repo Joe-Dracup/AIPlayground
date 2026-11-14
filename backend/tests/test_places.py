@@ -4,7 +4,7 @@ from typing import get_args
 import pytest
 from fastapi.testclient import TestClient
 
-from app.llm import FakeLLM, FakeToolCall, get_llm
+from app.llm import FakeLLM, FakeToolCall, ToolCallPart, get_llm
 from app.main import app
 from app.places.queries import find_places_by_name, search_places_near
 from app.places.vocabulary import TAG_DESCRIPTIONS, Tag
@@ -88,16 +88,16 @@ async def test_searching_around_an_unknown_place_returns_none(sessions):
         assert await search_places_near(session, 999_999, within_m=1000) is None
 
 
-def tool_use(name: str, tool_input: dict) -> dict:
-    return {"type": "tool_use", "id": "toolu_1", "name": name, "input": tool_input}
+def tool_use(name: str, tool_input: dict) -> ToolCallPart:
+    return ToolCallPart(id="call_1", name=name, arguments=tool_input)
 
 
 async def test_find_place_tool_returns_matches_as_json(sessions):
     result = await ToolRegistry(place_tools(sessions)).run(
         tool_use("find_place", {"query": "piccadilly"})
     )
-    assert result["is_error"] is False
-    assert [place["name"] for place in json.loads(result["content"])] == [
+    assert result.is_error is False
+    assert [place["name"] for place in json.loads(result.content)] == [
         "Manchester Piccadilly",
         "Piccadilly Gardens",
     ]
@@ -108,7 +108,7 @@ async def test_search_places_tool_returns_matches_as_json(sessions):
     result = await ToolRegistry(place_tools(sessions)).run(
         tool_use("search_places", {"near_place_id": origin, "category": "pub"})
     )
-    [pub] = json.loads(result["content"])
+    [pub] = json.loads(result.content)
     assert pub == {
         "id": pub["id"],
         "name": "Port Street Beer House",
@@ -122,8 +122,8 @@ async def test_search_places_tool_reports_an_unknown_place(sessions):
     result = await ToolRegistry(place_tools(sessions)).run(
         tool_use("search_places", {"near_place_id": 999_999})
     )
-    assert result["is_error"] is True
-    assert result["content"] == "There's no place with id 999999. Look it up with find_place."
+    assert result.is_error is True
+    assert result.content == "There's no place with id 999999. Look it up with find_place."
 
 
 def test_every_tag_has_a_description():

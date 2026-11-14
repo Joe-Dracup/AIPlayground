@@ -5,7 +5,19 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 from starlette.websockets import WebSocketDisconnect
 
-from app.llm import FakeLLM, FakeRaise, FakeToolCall, Finished, LLMError, TextDelta, get_llm
+from app.llm import (
+    FakeLLM,
+    FakeRaise,
+    FakeToolCall,
+    Finished,
+    LLMError,
+    Message,
+    TextDelta,
+    TextPart,
+    ToolCallPart,
+    ToolResultPart,
+    get_llm,
+)
 from app.main import CONVERSATION_NOT_FOUND, app
 from app.tools import get_tools
 from app.tools.base import Tool, ToolRegistry
@@ -96,9 +108,9 @@ def test_sends_the_whole_conversation_to_the_llm(client, llm):
         receive_reply(ws)
 
     assert llm.calls[-1] == [
-        {"role": "user", "content": "hi"},
-        {"role": "assistant", "content": [{"type": "text", "text": "Hello there"}]},
-        {"role": "user", "content": "again"},
+        Message.user("hi"),
+        Message(role="assistant", parts=[TextPart(text="Hello there")], provider="fake"),
+        Message.user("again"),
     ]
 
 
@@ -151,26 +163,15 @@ def test_runs_a_tool_and_replies_with_the_result(client, llm):
         ws.send_text("what time is it")
         assert reply_text(ws) == "Tool said: 12:00"
 
-    # The second request carried Claude's tool call and our result back to it.
+    # The second request carried the LLM's tool call and our result back to it.
     assert llm.calls[-1] == [
-        {"role": "user", "content": "what time is it"},
-        {
-            "role": "assistant",
-            "content": [
-                {"type": "tool_use", "id": "toolu_fake_1", "name": "get_time", "input": {}}
-            ],
-        },
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "tool_result",
-                    "tool_use_id": "toolu_fake_1",
-                    "content": "12:00",
-                    "is_error": False,
-                }
-            ],
-        },
+        Message.user("what time is it"),
+        Message(
+            role="assistant",
+            parts=[ToolCallPart(id="call_fake_1", name="get_time", arguments={})],
+            provider="fake",
+        ),
+        Message(role="tool", parts=[ToolResultPart(call_id="call_fake_1", content="12:00")]),
     ]
 
 
@@ -192,13 +193,8 @@ class LoopingLLM:
     """Asks for the time every time, and never answers."""
 
     async def stream_reply(self, messages, tools):
-        tool_use = {
-            "type": "tool_use",
-            "id": f"toolu_{len(messages)}",
-            "name": "get_time",
-            "input": {},
-        }
-        yield Finished([tool_use], "tool_use")
+        call = ToolCallPart(id=f"call_{len(messages)}", name="get_time", arguments={})
+        yield Finished(Message(role="assistant", parts=[call]), "tool_calls")
 
 
 def test_gives_up_on_endless_tool_calls(client):

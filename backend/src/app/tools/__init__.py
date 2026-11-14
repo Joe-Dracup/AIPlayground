@@ -1,4 +1,4 @@
-"""Tools Claude can call. To add one, write it in its own module and add it to get_tools."""
+"""Tools the LLM can call. To add one, write it in its own module and add it to get_tools."""
 
 from app.db import Sessions
 from app.tools.base import ToolRegistry

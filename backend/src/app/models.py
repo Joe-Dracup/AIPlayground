@@ -36,7 +36,7 @@ class Conversation(Base):
 
 class Message(Base):
     __tablename__ = "messages"
-    __table_args__ = (CheckConstraint("role IN ('user', 'assistant')", name="role"),)
+    __table_args__ = (CheckConstraint("role IN ('user', 'assistant', 'tool')", name="role"),)
 
     # Auto-incrementing, so it also gives the order messages were added in.
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -44,8 +44,12 @@ class Message(Base):
         ForeignKey("conversations.id", ondelete="CASCADE"), index=True
     )
     role: Mapped[str]
-    # JSONB so it can hold either plain text or the list of content blocks the Claude API returns.
-    content: Mapped[str | list[dict[str, Any]]] = mapped_column(JSONB)
+    # The message's parts, in our own format (app.llm.messages).
+    parts: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    provider: Mapped[str | None]
+    model: Mapped[str | None]
+    # The provider's response exactly as received, for debugging or rebuilding parts later.
+    raw: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
