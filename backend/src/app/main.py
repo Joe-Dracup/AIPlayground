@@ -5,9 +5,12 @@ from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from app.chat import TurnComplete, display_history, run_turn
 from app.config import settings
-from app.llm import ChatMessage, LLMClient, LLMError, get_llm
+from app.llm import ChatMessage, LLMClient, LLMError, TextDelta, get_llm
 from app.store import PostgresConversationStore, get_store
+from app.tools import get_tools
+from app.tools.base import ToolRegistry
 
 app = FastAPI()
 
@@ -48,6 +51,7 @@ async def web_socket_endpoint(
     websocket: WebSocket,
     conversation_id: uuid.UUID,
     llm: Annotated[LLMClient, Depends(get_llm)],
+    tools: Annotated[ToolRegistry, Depends(get_tools)],
     store: Store,
 ):
     await websocket.accept()
@@ -57,7 +61,7 @@ async def web_socket_endpoint(
         return
 
     # Send the history first, so a reconnecting client can rebuild the conversation.
-    await websocket.send_json({"type": "history", "messages": messages})
+    await websocket.send_json({"type": "history", "messages": display_history(messages)})
 
     try:
         while True:
@@ -66,22 +70,20 @@ async def web_socket_endpoint(
             messages.append(user_message)
             await store.append(conversation_id, user_message)
 
-            # Forward each chunk as it arrives, and keep the full reply for the history.
-            reply = ""
             try:
-                async for chunk in llm.stream_reply(messages):
-                    reply += chunk
-                    await websocket.send_json({"type": "delta", "text": chunk})
+                async for event in run_turn(llm, tools, messages):
+                    match event:
+                        case TextDelta(text):
+                            await websocket.send_json({"type": "delta", "text": text})
+                        case TurnComplete(new_messages):
+                            # Only saved once complete, so a reply cut off by an error is never
+                            # stored.
+                            messages.extend(new_messages)
+                            await store.append(conversation_id, *new_messages)
+                            await websocket.send_json({"type": "done"})
             except LLMError as e:
                 # The partial reply isn't saved; the user's message stays, so they can try again.
                 await websocket.send_json({"type": "error", "message": str(e)})
-                continue
-
-            # Only saved once complete, so a reply cut off by an error is never stored.
-            assistant_message: ChatMessage = {"role": "assistant", "content": reply}
-            messages.append(assistant_message)
-            await store.append(conversation_id, assistant_message)
-            await websocket.send_json({"type": "done"})
     except WebSocketDisconnect:
         # The client closed the tab or navigated away. Everything is already saved.
         pass

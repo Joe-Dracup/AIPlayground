@@ -36,14 +36,16 @@ class PostgresConversationStore:
                 return None
             return [{"role": m.role, "content": m.content} for m in conversation.messages]
 
-    async def append(self, conversation_id: uuid.UUID, message: ChatMessage) -> None:
+    async def append(self, conversation_id: uuid.UUID, *messages: ChatMessage) -> None:
+        # In one transaction, so a turn's messages are saved all together or not at all.
         async with self._sessions() as session:
-            session.add(
+            session.add_all(
                 Message(
                     conversation_id=conversation_id,
                     role=message["role"],
                     content=message["content"],
                 )
+                for message in messages
             )
             await session.commit()
 
